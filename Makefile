@@ -8,4 +8,4 @@ help:
 ## run: run the thumbnailer
 run:
 	@echo "Running thumbnailer..."
-	@go run .
+	@go run . $(arguments)

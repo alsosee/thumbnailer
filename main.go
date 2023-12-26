@@ -24,6 +24,7 @@ import (
 	"github.com/charmbracelet/log"
 	flags "github.com/jessevdk/go-flags"
 	"github.com/nfnt/resize"
+	gitignore "github.com/sabhiram/go-gitignore"
 	"gopkg.in/yaml.v3"
 
 	"image/draw"
@@ -76,6 +77,8 @@ type appConfig struct {
 
 	// Force thumbnail generation
 	ForceThumbnails bool `long:"force-thumbnails" description:"force thumbnail generation"`
+
+	Include []string `long:"include" description:"include only these directories"`
 
 	// Blurhash
 	ForceBlurhash       bool `long:"force-blurhash" description:"force blurhash generation"`
@@ -130,6 +133,8 @@ func run() error {
 func scanDirectories(dir string) ([]string, error) {
 	var result []string
 
+	gi := gitignore.CompileIgnoreLines(cfg.Include...)
+
 	log.Info("Getting directories...")
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -143,6 +148,10 @@ func scanDirectories(dir string) ([]string, error) {
 		// Skip .git directory
 		if info.Name() == ".git" {
 			return filepath.SkipDir
+		}
+
+		if !gi.MatchesPath(path) {
+			return nil
 		}
 
 		result = append(result, path)
@@ -409,7 +418,7 @@ func generateThumbnails(
 
 		thumbPath, err := generateThumbnail(batch, files, dir)
 		if err != nil {
-			return nil, fmt.Errorf("error generating thumbnail for %d: %v", batch, err)
+			return nil, fmt.Errorf("error generating thumbnail for %s / %d: %v", dir, batch, err)
 		}
 
 		// upload thumbnail to R2
