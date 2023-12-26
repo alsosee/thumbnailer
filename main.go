@@ -493,6 +493,10 @@ func generateThumbnail(batch int, media []*Media, dir string) (string, error) {
 		counter++
 	}
 
+	if rowWidth > totalWidth {
+		totalWidth = rowWidth
+	}
+
 	log.Infof("Total width: %d, total height: %d", totalWidth, totalHeight)
 	img := image.NewRGBA(image.Rect(0, 0, totalWidth, totalHeight))
 
