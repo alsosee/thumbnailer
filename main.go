@@ -184,9 +184,13 @@ func processDirectory(ctx context.Context, r2 *R2, dir string) error {
 		return fmt.Errorf("error uploading new media: %v", err)
 	}
 
-	media, err = generateThumbnails(ctx, r2, media, dir, cfg.ForceThumbnails)
-	if err != nil {
-		return fmt.Errorf("error generating thumbnails: %v", err)
+	mediaGrouped := groupByType(media)
+
+	for format, media := range mediaGrouped {
+		media, err = generateThumbnails(ctx, r2, media, dir, format, cfg.ForceThumbnails)
+		if err != nil {
+			return fmt.Errorf("error generating thumbnails: %v", err)
+		}
 	}
 
 	// media, err = generateBlurhashes(media, dir, cfg.ForceBlurhash)
@@ -366,6 +370,25 @@ func uploadNewMedia(
 	return media, nil
 }
 
+func groupByType(media []*Media) map[string][]*Media {
+	result := make(map[string][]*Media)
+
+	for _, file := range media {
+		ext := strings.Trim(filepath.Ext(file.Path), ".")
+		if ext == "jpeg" {
+			ext = "jpg"
+		}
+
+		if _, ok := result[ext]; !ok {
+			result[ext] = make([]*Media, 0)
+		}
+
+		result[ext] = append(result[ext], file)
+	}
+
+	return result
+}
+
 const (
 	maxThumbSize = 324 /* 162 * 2 */
 	maxPerRow    = 10
@@ -377,6 +400,7 @@ func generateThumbnails(
 	r2 *R2,
 	media []*Media,
 	dir string,
+	format string,
 	force bool,
 ) ([]*Media, error) {
 	// split files into batches of 100 files each
@@ -416,7 +440,7 @@ func generateThumbnails(
 			continue
 		}
 
-		thumbPath, err := generateThumbnail(batch, files, dir)
+		thumbPath, err := generateThumbnail(batch, files, dir, format)
 		if err != nil {
 			return nil, fmt.Errorf("error generating thumbnail for %s / %d: %v", dir, batch, err)
 		}
@@ -442,7 +466,7 @@ func generateThumbnails(
 	return media, nil
 }
 
-func generateThumbnail(batch int, media []*Media, dir string) (string, error) {
+func generateThumbnail(batch int, media []*Media, dir, format string) (string, error) {
 	log.Infof("Generating thumbnail for %d", batch)
 	// each thumbnail should fit into 140x140px square, maximum 10 files in a row
 	for _, file := range media {
@@ -506,12 +530,11 @@ func generateThumbnail(batch int, media []*Media, dir string) (string, error) {
 		totalWidth = rowWidth
 	}
 
-	log.Infof("Total width: %d, total height: %d", totalWidth, totalHeight)
 	img := image.NewRGBA(image.Rect(0, 0, totalWidth, totalHeight))
 
 	// draw files on thumbnail
 	var (
-		thumbPath = "thumbnails_" + strconv.Itoa(batch) + ".png"
+		thumbPath = "thumbnails_" + strconv.Itoa(batch) + "." + format
 		x         int
 		y         int
 		col       int
@@ -547,24 +570,28 @@ func generateThumbnail(batch int, media []*Media, dir string) (string, error) {
 		col++
 	}
 
-	// encode img thumbnail into JPEG
 	out, err := os.Create(filepath.Join(dir, thumbPath))
 	if err != nil {
 		return "", fmt.Errorf("error creating file %q: %v", thumbPath, err)
 	}
 	defer out.Close()
 
-	// encode thumbnail into PNG
-	if err = png.Encode(out, img); err != nil {
-		return "", fmt.Errorf("error encoding thumbnail: %v", err)
+	switch format {
+	case "png":
+		// encode thumbnail into PNG
+		if err = png.Encode(out, img); err != nil {
+			return "", fmt.Errorf("error encoding thumbnail: %v", err)
+		}
+	case "jpg":
+		jpegOptions := jpeg.Options{
+			Quality: 95,
+		}
+		if err := jpeg.Encode(out, img, &jpegOptions); err != nil {
+			return "", fmt.Errorf("error encoding thumbnail: %v", err)
+		}
+	default:
+		return "", fmt.Errorf("unsupported format: %s", format)
 	}
-
-	// jpegOptions := jpeg.Options{
-	// 	Quality: 90,
-	// }
-	// if err = jpeg.Encode(out, img, &jpegOptions); err != nil {
-	// 	return "", fmt.Errorf("error encoding thumbnail: %v", err)
-	// }
 
 	return thumbPath, nil
 }
