@@ -150,7 +150,7 @@ func scanDirectories(dir string) ([]string, error) {
 			return filepath.SkipDir
 		}
 
-		if !gi.MatchesPath(path) {
+		if len(cfg.Include) > 0 && !gi.MatchesPath(path) {
 			return nil
 		}
 

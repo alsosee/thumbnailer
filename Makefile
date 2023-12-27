@@ -6,6 +6,8 @@ help:
 
 .PHONY: run
 ## run: run the thumbnailer
+## : examples:
+## :   make run arguments="--force-thumbnails --include=*/People"
 run:
 	@echo "Running thumbnailer..."
 	@go run . $(arguments)
