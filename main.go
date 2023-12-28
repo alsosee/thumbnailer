@@ -9,10 +9,13 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"image"
+	"image/draw"
+	"image/jpeg"
+	"image/png"
 	"io"
 	"os"
 	"path/filepath"
@@ -20,19 +23,14 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bbrks/go-blurhash"
 	"github.com/charmbracelet/log"
 	flags "github.com/jessevdk/go-flags"
 	"github.com/nfnt/resize"
 	gitignore "github.com/sabhiram/go-gitignore"
 	"gopkg.in/yaml.v3"
-
-	"image/draw"
-	"image/jpeg"
-	"image/png"
 )
 
-// Media struct for items in .thumbs.yml file
+// Media struct for items in .thumbs.yml file.
 type Media struct {
 	Path                string
 	Width               int    `yaml:"width,omitempty"`
@@ -52,7 +50,7 @@ type Media struct {
 }
 
 // MediaContainer is a wrapper for Photo struct, used for sorting,
-// so that references are not swapped and still can be modified
+// so that references are not swapped and still can be modified.
 type MediaContainer struct {
 	Media *Media
 }
@@ -100,7 +98,7 @@ func main() {
 func run() error {
 	_, err := flags.Parse(&cfg)
 	if err != nil {
-		return fmt.Errorf("error parsing flags: %v", err)
+		return fmt.Errorf("parsing flags: %w", err)
 	}
 
 	ctx := context.Background()
@@ -112,18 +110,18 @@ func run() error {
 		cfg.R2Bucket,
 	)
 	if err != nil {
-		return fmt.Errorf("error creating r2 client: %v", err)
+		return fmt.Errorf("creating r2 client: %w", err)
 	}
 
 	dirs, err := scanDirectories(cfg.MediaDir)
 	if err != nil {
-		return fmt.Errorf("error scanning directories: %v", err)
+		return fmt.Errorf("scanning directories: %w", err)
 	}
 
 	for _, dir := range dirs {
 		err = processDirectory(ctx, r2, dir)
 		if err != nil {
-			return fmt.Errorf("error processing directory %q: %v", dir, err)
+			return fmt.Errorf("processing directory %q: %w", dir, err)
 		}
 	}
 
@@ -169,42 +167,32 @@ func processDirectory(ctx context.Context, r2 *R2, dir string) error {
 
 	// look for .thumb.yml file
 	media, err := loadThumbsFile(thumbsFile)
-	if err != nil && err != errThumbYamlNotFound {
-		return fmt.Errorf("error loading thumbs file: %v", err)
+	if err != nil && errors.Is(err, errThumbYamlNotFound) {
+		return fmt.Errorf("loading thumbs file: %w", err)
 	}
 
 	// scan directory for all image files
 	files, err := scanDirectory(dir)
 	if err != nil {
-		return fmt.Errorf("error scanning directory: %v", err)
+		return fmt.Errorf("scanning directory: %w", err)
 	}
 
 	media, err = uploadNewMedia(ctx, r2, media, files, dir)
 	if err != nil {
-		return fmt.Errorf("error uploading new media: %v", err)
+		return fmt.Errorf("uploading new media: %w", err)
 	}
 
 	mediaGrouped := groupByType(media)
 
 	for format, media := range mediaGrouped {
-		media, err = generateThumbnails(ctx, r2, media, dir, format, cfg.ForceThumbnails)
+		_, err = generateThumbnails(ctx, r2, media, dir, format, cfg.ForceThumbnails)
 		if err != nil {
-			return fmt.Errorf("error generating thumbnails: %v", err)
+			return fmt.Errorf("generating thumbnails: %w", err)
 		}
 	}
 
-	// media, err = generateBlurhashes(media, dir, cfg.ForceBlurhash)
-	// if err != nil {
-	// 	return fmt.Errorf("error generating blurhashes: %v", err)
-	// }
-
-	// media, err = generateBlurhashImages(media, cfg.ForceBlurhashImages)
-	// if err != nil {
-	// 	return fmt.Errorf("error generating blurhash images: %v", err)
-	// }
-
 	if err = saveThumbsFile(thumbsFile, media); err != nil {
-		return fmt.Errorf("error saving media: %v", err)
+		return fmt.Errorf("saving media: %w", err)
 	}
 
 	return nil
@@ -219,32 +207,21 @@ func loadThumbsFile(path string) ([]*Media, error) {
 	// read .thumbs.yml file
 	fileContent, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("error reading file: %v", err)
+		return nil, fmt.Errorf("reading file: %w", err)
 	}
 
 	var media []*Media
 	if err = yaml.Unmarshal(fileContent, &media); err != nil {
-		return nil, fmt.Errorf("error unmarshaling file: %v", err)
+		return nil, fmt.Errorf("unmarshaling file: %w", err)
 	}
 
 	return media, nil
 }
 
-func absolutePath(dir string) (string, error) {
-	// directory might be relative to home directory
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("error getting absolute path: %v", err)
-	}
-
-	// replace ~ with home directory
-	return strings.Replace(dir, "~", home, 1), nil
-}
-
 func scanDirectory(dir string) ([]string, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		return nil, fmt.Errorf("error reading directory %q: %v", dir, err)
+		return nil, fmt.Errorf("reading directory %q: %w", dir, err)
 	}
 
 	var result []string
@@ -268,10 +245,7 @@ func scanDirectory(dir string) ([]string, error) {
 	return result, nil
 }
 
-func diff(media []*Media, files []string) ([]string, []string) {
-	var toAdd []string
-	var toDelete []string
-
+func diff(media []*Media, files []string) (toAdd, toDelete []string) {
 	// find new files
 	for _, file := range files {
 		if !containsMedia(media, file) {
@@ -316,12 +290,11 @@ func saveThumbsFile(path string, media []*Media) error {
 
 	fileContent, err := yaml.Marshal(media)
 	if err != nil {
-		return fmt.Errorf("error marshaling media: %v", err)
+		return fmt.Errorf("marshaling media: %w", err)
 	}
 
-	err = os.WriteFile(path, fileContent, 0644)
-	if err != nil {
-		return fmt.Errorf("error writing file: %v", err)
+	if err = os.WriteFile(path, fileContent, 0o600); err != nil {
+		return fmt.Errorf("writing file: %w", err)
 	}
 
 	return nil
@@ -344,7 +317,7 @@ func uploadNewMedia(
 		path := filepath.Join(dir, file)
 		content, err := os.ReadFile(path)
 		if err != nil {
-			return nil, fmt.Errorf("error reading file: %v", err)
+			return nil, fmt.Errorf("reading file: %w", err)
 		}
 
 		// R2 object key is the same as file path, relative to media directory
@@ -352,7 +325,7 @@ func uploadNewMedia(
 
 		log.Infof("Uploading %s", key)
 		if err = r2.Upload(ctx, key, content); err != nil {
-			return nil, fmt.Errorf("error uploading file: %v", err)
+			return nil, fmt.Errorf("uploading file: %w", err)
 		}
 	}
 
@@ -442,19 +415,19 @@ func generateThumbnails(
 
 		thumbPath, err := generateThumbnail(batch, files, dir, format)
 		if err != nil {
-			return nil, fmt.Errorf("error generating thumbnail for %s / %d: %v", dir, batch, err)
+			return nil, fmt.Errorf("generating thumbnail for %s / %d: %w", dir, batch, err)
 		}
 
 		// upload thumbnail to R2
 		thumbContent, err := os.ReadFile(filepath.Join(dir, thumbPath))
 		if err != nil {
-			return nil, fmt.Errorf("error reading thumbnail %q: %v", thumbPath, err)
+			return nil, fmt.Errorf("reading thumbnail %q: %w", thumbPath, err)
 		}
 
 		cleanPath := strings.TrimPrefix(filepath.Join(dir, thumbPath), cfg.MediaDir+"/")
 
 		if err := r2.Upload(ctx, cleanPath, thumbContent); err != nil {
-			return nil, fmt.Errorf("error uploading thumbnail %q: %v", thumbPath, err)
+			return nil, fmt.Errorf("uploading thumbnail %q: %w", thumbPath, err)
 		}
 
 		// update thumb path with CRC32 checksum for each photo
@@ -473,7 +446,7 @@ func generateThumbnail(batch int, media []*Media, dir, format string) (string, e
 		// decode photo
 		img, err := readImage(dir, file.Path)
 		if err != nil {
-			return "", fmt.Errorf("error reading image: %v", err)
+			return "", fmt.Errorf("reading image: %w", err)
 		}
 		file.Width = img.Bounds().Dx()
 		file.Height = img.Bounds().Dy()
@@ -572,7 +545,7 @@ func generateThumbnail(batch int, media []*Media, dir, format string) (string, e
 
 	out, err := os.Create(filepath.Join(dir, thumbPath))
 	if err != nil {
-		return "", fmt.Errorf("error creating file %q: %v", thumbPath, err)
+		return "", fmt.Errorf("creating file %q: %w", thumbPath, err)
 	}
 	defer out.Close()
 
@@ -580,14 +553,14 @@ func generateThumbnail(batch int, media []*Media, dir, format string) (string, e
 	case "png":
 		// encode thumbnail into PNG
 		if err = png.Encode(out, img); err != nil {
-			return "", fmt.Errorf("error encoding thumbnail: %v", err)
+			return "", fmt.Errorf("encoding thumbnail: %w", err)
 		}
 	case "jpg":
 		jpegOptions := jpeg.Options{
 			Quality: 95,
 		}
 		if err := jpeg.Encode(out, img, &jpegOptions); err != nil {
-			return "", fmt.Errorf("error encoding thumbnail: %v", err)
+			return "", fmt.Errorf("encoding thumbnail: %w", err)
 		}
 	default:
 		return "", fmt.Errorf("unsupported format: %s", format)
@@ -596,16 +569,16 @@ func generateThumbnail(batch int, media []*Media, dir, format string) (string, e
 	return thumbPath, nil
 }
 
-func readImage(dir string, path string) (image.Image, error) {
+func readImage(dir, path string) (image.Image, error) {
 	file, err := os.Open(filepath.Join(dir, path))
 	if err != nil {
-		return nil, fmt.Errorf("error opening file: %v", err)
+		return nil, fmt.Errorf("opening file: %w", err)
 	}
 	defer file.Close()
 
 	img, _, err := image.Decode(file)
 	if err != nil {
-		return nil, fmt.Errorf("error decoding image: %v", err)
+		return nil, fmt.Errorf("decoding image: %w", err)
 	}
 
 	return img, nil
@@ -614,96 +587,19 @@ func readImage(dir string, path string) (image.Image, error) {
 func getContentType(name string) string {
 	ext := filepath.Ext(name)
 	switch {
-	case ".jpg" == ext || ".jpeg" == ext:
+	case ext == ".jpg" || ext == ".jpeg":
 		return "image/jpeg"
-	case ".png" == ext:
+	case ext == ".png":
 		return "image/png"
-	case ".gif" == ext:
+	case ext == ".gif":
 		return "image/gif"
-	case ".webp" == ext:
+	case ext == ".webp":
 		return "image/webp"
-	case ".mp4" == ext:
+	case ext == ".mp4":
 		return "video/mp4"
 	default:
 		return "application/octet-stream"
 	}
-}
-
-func generateBlurhashes(media []*Media, dir string, force bool) ([]*Media, error) {
-	var err error
-	for _, file := range media {
-		if file.Blurhash != "" && !force {
-			continue
-		}
-
-		log.Infof("Generating blurhash for %s", file.Path)
-		file.Blurhash, err = generateBlurhash(file.Path, dir)
-		if err != nil {
-			return nil, fmt.Errorf("error generating blurhash: %v", err)
-		}
-	}
-
-	return media, nil
-}
-
-func generateBlurhash(path, dir string) (string, error) {
-	file, err := os.Open(filepath.Join(dir, path))
-	if err != nil {
-		return "", fmt.Errorf("error opening file: %v", err)
-	}
-	defer file.Close()
-
-	return generateBlurhashForReader(file)
-}
-
-func generateBlurhashForReader(reader io.Reader) (string, error) {
-	m, _, err := image.Decode(reader)
-	if err != nil {
-		return "", err
-	}
-
-	return blurhash.Encode(4, 4, m)
-}
-
-func generateBlurhashImages(media []*Media, force bool) ([]*Media, error) {
-	var err error
-	for _, file := range media {
-		if file.Blurhash == "" {
-			continue
-		}
-
-		if file.BlurhashImageBase64 != "" && !force {
-			continue
-		}
-
-		log.Infof("Generating blurhash image for %s", file.Path)
-		file.BlurhashImageBase64, err = generateBlurhashImage(file)
-		if err != nil {
-			return nil, fmt.Errorf("error generating blurhash image: %v", err)
-		}
-	}
-
-	return media, nil
-}
-
-func generateBlurhashImage(file *Media) (string, error) {
-	m, err := blurhash.Decode(
-		file.Blurhash,
-		file.ThumbWidth/2,
-		file.ThumbHeight/2,
-		1,
-	)
-	if err != nil {
-		return "", fmt.Errorf("error decoding blurhash: %v", err)
-	}
-
-	buf := new(bytes.Buffer)
-	if err := jpeg.Encode(buf, m, &jpeg.Options{Quality: 90}); err != nil {
-		return "", fmt.Errorf("error encoding blurhash image: %v", err)
-	}
-
-	b64 := base64.StdEncoding.EncodeToString(buf.Bytes())
-	return b64, nil
 }
 
 func crc32sum(content []byte) string {

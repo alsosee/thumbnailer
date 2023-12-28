@@ -11,13 +11,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-// R2 is a struct describing r2 cloudflare storage bucket
+// R2 is a struct describing r2 cloudflare storage bucket.
 type R2 struct {
 	Bucket string
 	client *s3.Client
 }
 
-// NewR2 creates new R2 struct
+// NewR2 creates new R2 struct.
 func NewR2(
 	accountID string,
 	accessKeyID string,
@@ -36,7 +36,7 @@ func NewR2(
 		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(accessKeyID, accessKeySecret, "")),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("Error creating config: %v", err)
+		return nil, fmt.Errorf("creating config: %w", err)
 	}
 
 	client := s3.NewFromConfig(cfg)
@@ -47,7 +47,7 @@ func NewR2(
 	}, nil
 }
 
-// Upload uploads given body to given key
+// Upload uploads given body to given key.
 func (r2 *R2) Upload(ctx context.Context, key string, body []byte) error {
 	_, err := r2.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(r2.Bucket),
@@ -56,7 +56,7 @@ func (r2 *R2) Upload(ctx context.Context, key string, body []byte) error {
 		ContentType: aws.String(getContentType(key)),
 	})
 	if err != nil {
-		return fmt.Errorf("Error uploading object: %v", err)
+		return fmt.Errorf("uploading object: %w", err)
 	}
 
 	return nil
