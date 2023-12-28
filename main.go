@@ -67,22 +67,22 @@ func (a byThumbHeightDesc) Less(i, j int) bool {
 
 type appConfig struct {
 	// Directory with media files
-	MediaDir string `env:"MEDIA_DIR" long:"media-dir" description:"path to media directory" default:"media"`
+	MediaDir string `env:"INPUT_MEDIA" long:"media-dir" description:"path to media directory" default:"media"`
 
 	// Cloudflare R2 storage
-	R2AccountID       string `env:"R2_ACCOUNT_ID" long:"r2-account-id" description:"r2 account id"`
-	R2AccessKeyID     string `env:"R2_ACCESS_KEY_ID" long:"r2-access-key-id" description:"r2 access key id"`
-	R2AccessKeySecret string `env:"R2_ACCESS_KEY_SECRET" long:"r2-access-key-secret" description:"r2 access key secret"`
-	R2Bucket          string `env:"R2_BUCKET" long:"r2-bucket" description:"r2 bucket"`
+	R2AccountID       string `env:"INPUT_R2_ACCOUNT_ID" long:"r2-account-id" description:"r2 account id"`
+	R2AccessKeyID     string `env:"INPUT_R2_ACCESS_KEY_ID" long:"r2-access-key-id" description:"r2 access key id"`
+	R2AccessKeySecret string `env:"INPUT_R2_ACCESS_KEY_SECRET" long:"r2-access-key-secret" description:"r2 access key secret"`
+	R2Bucket          string `env:"INPUT_R2_BUCKET" long:"r2-bucket" description:"r2 bucket"`
 
 	// Force thumbnail generation
-	ForceThumbnails bool `long:"force-thumbnails" description:"force thumbnail generation"`
+	ForceThumbnails bool `env:"INPUT_FORCE_THUMBNAILS" long:"force-thumbnails" description:"force thumbnail generation"`
 
-	Include []string `long:"include" description:"include only these directories"`
+	Include []string `env:"INPUT_INCLUDE" long:"include" description:"include only these directories"`
 
 	// Blurhash
-	ForceBlurhash       bool `long:"force-blurhash" description:"force blurhash generation"`
-	ForceBlurhashImages bool `long:"force-blurhash-images" description:"force blurhash images generation"`
+	ForceBlurhash       bool `env:"INPUT_FORCE_BLURHASH" long:"force-blurhash" description:"force blurhash generation"`
+	ForceBlurhashImages bool `env:"INPUT_FORCE_BLURHASH_IMAGES" long:"force-blurhash-images" description:"force blurhash images generation"`
 }
 
 var cfg appConfig

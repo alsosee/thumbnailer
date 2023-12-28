@@ -1,0 +1,41 @@
+name: Create thumbnails
+description: ""
+
+author: Konstantin Chukhlomin <mail@chuhlomin.com>
+
+branding:
+  icon: file-text
+  color: purple
+
+inputs:
+  media:
+    description: Directory that contains media files
+    required: true
+  r2_account_id:
+    description: Cloudflare Account ID
+    required: true
+  r2_access_key_id:
+    description: Cloudflare R2 access key ID
+    required: true
+  r2_access_key_secret:
+    description: Cloudflare R2 access key secret
+    required: true
+  r2_bucket:
+    description: Cloudflare R2 bucket name
+    required: true
+  force_thumbnails:
+    description: Force thumbnail creation
+    required: false
+  include:
+    description: Only include files matching this pattern
+    required: false
+  force_blurhash:
+    description: Force blurhash creation
+    required: false
+  force_blurhash_images:
+    description: Force blurhash creation for images
+    required: false
+
+runs:
+  using: docker
+  image: docker://ghcr.io/alsosee/thumbnailer:latest
