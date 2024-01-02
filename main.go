@@ -144,11 +144,12 @@ func scanDirectories(dir string) ([]string, error) {
 		}
 
 		// Skip .git directory
-		if info.Name() == ".git" {
+		if info.Name() == ".git" || info.Name() == ".github" {
 			return filepath.SkipDir
 		}
 
 		if len(cfg.Include) > 0 && !gi.MatchesPath(path) {
+			log.Infof("Ignoring %s", path)
 			return nil
 		}
 
@@ -167,7 +168,7 @@ func processDirectory(ctx context.Context, r2 *R2, dir string) error {
 
 	// look for .thumb.yml file
 	media, err := loadThumbsFile(thumbsFile)
-	if err != nil && errors.Is(err, errThumbYamlNotFound) {
+	if err != nil && !errors.Is(err, errThumbYamlNotFound) {
 		return fmt.Errorf("loading thumbs file: %w", err)
 	}
 
