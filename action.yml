@@ -26,15 +26,19 @@ inputs:
   force_thumbnails:
     description: Force thumbnail creation
     required: false
+    default: "false"
   include:
     description: Only include files matching this pattern
     required: false
+    default: ""
   force_blurhash:
     description: Force blurhash creation
     required: false
+    default: "false"
   force_blurhash_images:
     description: Force blurhash creation for images
     required: false
+    default: "false"
 
 runs:
   using: docker

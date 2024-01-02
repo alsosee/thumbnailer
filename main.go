@@ -417,6 +417,8 @@ func generateThumbnails(
 				batches[batch] = nil
 			}
 		}
+	} else {
+		log.Info("Forcing thumbnail generation")
 	}
 
 	// generate thumbnails for each year
