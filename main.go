@@ -250,6 +250,8 @@ func scanDirectory(dir string) ([]string, error) {
 		result = append(result, file.Name())
 	}
 
+	sort.Strings(result)
+
 	return result, nil
 }
 
@@ -401,10 +403,12 @@ func generateThumbnails(
 			allHaveSameThumb := true
 			for _, file := range files {
 				if file.ThumbPath == "" {
+					log.Infof("Batch %d has no thumbnails", batch)
 					allHaveThumbs = false
 					break
 				}
 				if file.ThumbPath != files[0].ThumbPath {
+					log.Infof("Batch %d has different ThumbPath: want %q, have %q", batch, file.ThumbPath, files[0].ThumbPath)
 					allHaveSameThumb = false
 					break
 				}

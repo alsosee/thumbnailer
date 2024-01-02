@@ -52,9 +52,9 @@ jobs:
             ${{ env.DOCKER_IMAGE }}:${{ github.sha }}
           platforms: linux/amd64
 
-      # - name: Trigger deploy
-      #   uses: peter-evans/repository-dispatch@v2
-      #   with:
-      #     token: ${{ secrets.PKG_TOKEN }}
-      #     repository: alsosee/media
-      #     event-type: deploy
+      - name: Trigger thumbnail regeneration
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.PKG_TOKEN }}
+          repository: alsosee/media
+          event-type: regenerate
