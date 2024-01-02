@@ -131,7 +131,14 @@ func run() error {
 func scanDirectories(dir string) ([]string, error) {
 	var result []string
 
-	gi := gitignore.CompileIgnoreLines(cfg.Include...)
+	// filter empty strings from cfg.Include
+	var include []string
+	for _, item := range cfg.Include {
+		if item != "" {
+			include = append(include, item)
+		}
+	}
+	gi := gitignore.CompileIgnoreLines(include...)
 
 	log.Info("Getting directories...")
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -148,7 +155,7 @@ func scanDirectories(dir string) ([]string, error) {
 			return filepath.SkipDir
 		}
 
-		if len(cfg.Include) > 0 && !gi.MatchesPath(path) {
+		if len(include) > 0 && !gi.MatchesPath(path) {
 			log.Infof("Ignoring %s", path)
 			return nil
 		}
