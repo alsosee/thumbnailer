@@ -110,7 +110,7 @@ func run() error {
 		cfg.R2Bucket,
 	)
 	if err != nil {
-		return fmt.Errorf("creating r2 client: %w", err)
+		return fmt.Errorf("creating R2 client: %w", err)
 	}
 
 	dirs, err := scanDirectories(cfg.MediaDir)
@@ -303,7 +303,7 @@ func saveThumbsFile(path string, media []*Media) error {
 		return fmt.Errorf("marshaling media: %w", err)
 	}
 
-	if err = os.WriteFile(path, fileContent, 0o600); err != nil {
+	if err = os.WriteFile(path, fileContent, 0o644); err != nil {
 		return fmt.Errorf("writing file: %w", err)
 	}
 
