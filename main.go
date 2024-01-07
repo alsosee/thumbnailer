@@ -454,7 +454,7 @@ func generateThumbnails(
 }
 
 func generateThumbnail(batch int, media []*Media, dir, format string) (string, error) {
-	log.Infof("Generating thumbnail for %d", batch)
+	log.Infof("Generating %s thumbnail for batch %d in %s", format, batch, dir)
 	// each thumbnail should fit into 140x140px square, maximum 10 files in a row
 	for _, file := range media {
 		// decode photo
