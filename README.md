@@ -1,5 +1,7 @@
 # thumbnailer
 
+[![main](https://github.com/alsosee/thumbnailer/actions/workflows/main.yml/badge.svg)](https://github.com/alsosee/thumbnailer/actions/workflows/main.yml)
+
 ## Overview
 
 An app that walks through a directory and creates sprite thumbnails for every directory with images in it.
