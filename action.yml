@@ -31,6 +31,10 @@ inputs:
     description: Only include files matching this pattern
     required: false
     default: ""
+  skip_image_upload:
+    description: Skip image upload, only create thumbnails
+    required: false
+    default: "false"
   force_blurhash:
     description: Force blurhash creation
     required: false

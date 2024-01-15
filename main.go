@@ -78,6 +78,8 @@ type appConfig struct {
 
 	Include []string `env:"INPUT_INCLUDE" long:"include" description:"include only these directories"`
 
+	SkipImageUpload bool `env:"INPUT_SKIP_IMAGE_UPLOAD" long:"skip-image-upload" description:"skip image upload to R2"`
+
 	// Blurhash
 	ForceBlurhash       bool `env:"INPUT_FORCE_BLURHASH" long:"force-blurhash" description:"force blurhash generation"`
 	ForceBlurhashImages bool `env:"INPUT_FORCE_BLURHASH_IMAGES" long:"force-blurhash-images" description:"force blurhash images generation"`
@@ -148,6 +150,11 @@ func scanDirectories(dir string) ([]string, error) {
 
 		if !info.IsDir() { // skip files
 			return nil
+		}
+
+		// temporary: if Dir name includes "_ignore", skip it
+		if strings.Contains(info.Name(), "_ignore") {
+			return filepath.SkipDir
 		}
 
 		// Skip .git directory
@@ -324,18 +331,20 @@ func uploadNewMedia(
 			Path: file,
 		})
 
-		path := filepath.Join(dir, file)
-		content, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("reading file: %w", err)
-		}
+		if !cfg.SkipImageUpload {
+			path := filepath.Join(dir, file)
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("reading file: %w", err)
+			}
 
-		// R2 object key is the same as file path, relative to media directory
-		key := strings.TrimPrefix(path, cfg.MediaDir+"/")
+			// R2 object key is the same as file path, relative to media directory
+			key := strings.TrimPrefix(path, cfg.MediaDir+"/")
 
-		log.Infof("Uploading %s", key)
-		if err = r2.Upload(ctx, key, content); err != nil {
-			return nil, fmt.Errorf("uploading file: %w", err)
+			log.Infof("Uploading %s", key)
+			if err = r2.Upload(ctx, key, content); err != nil {
+				return nil, fmt.Errorf("uploading file: %w", err)
+			}
 		}
 	}
 
