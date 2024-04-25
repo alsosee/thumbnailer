@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -60,4 +61,22 @@ func (r2 *R2) Upload(ctx context.Context, key string, body []byte) error {
 	}
 
 	return nil
+}
+
+func getContentType(name string) string {
+	ext := filepath.Ext(name)
+	switch {
+	case ext == ".jpg" || ext == ".jpeg":
+		return "image/jpeg"
+	case ext == ".png":
+		return "image/png"
+	case ext == ".gif":
+		return "image/gif"
+	case ext == ".webp":
+		return "image/webp"
+	case ext == ".mp4":
+		return "video/mp4"
+	default:
+		return "application/octet-stream"
+	}
 }

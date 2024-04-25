@@ -607,24 +607,6 @@ func readImage(dir, path string) (image.Image, error) {
 	return img, nil
 }
 
-func getContentType(name string) string {
-	ext := filepath.Ext(name)
-	switch {
-	case ext == ".jpg" || ext == ".jpeg":
-		return "image/jpeg"
-	case ext == ".png":
-		return "image/png"
-	case ext == ".gif":
-		return "image/gif"
-	case ext == ".webp":
-		return "image/webp"
-	case ext == ".mp4":
-		return "video/mp4"
-	default:
-		return "application/octet-stream"
-	}
-}
-
 func crc32sum(content []byte) string {
 	hash := crc32.NewIEEE()
 	if _, err := io.Copy(hash, bytes.NewReader(content)); err != nil {
