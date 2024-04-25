@@ -27,6 +27,7 @@ import (
 	flags "github.com/jessevdk/go-flags"
 	"github.com/nfnt/resize"
 	gitignore "github.com/sabhiram/go-gitignore"
+	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
 )
 
@@ -254,7 +255,7 @@ func scanDirectory(dir string) ([]string, error) {
 			continue
 		}
 
-		result = append(result, file.Name())
+		result = append(result, fixUnicode(file.Name()))
 	}
 
 	sort.Strings(result)
@@ -615,4 +616,8 @@ func crc32sum(content []byte) string {
 	}
 
 	return fmt.Sprintf("%x", hash.Sum32())
+}
+
+func fixUnicode(in string) string {
+	return norm.NFC.String(in)
 }

@@ -7,10 +7,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.19.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.43
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.40.2
-	github.com/bbrks/go-blurhash v1.1.1
 	github.com/charmbracelet/log v0.2.5
 	github.com/jessevdk/go-flags v1.5.0
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
+	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06
+	golang.org/x/text v0.14.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -38,6 +39,5 @@ require (
 	github.com/muesli/reflow v0.3.0 // indirect
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
-	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
 	golang.org/x/sys v0.7.0 // indirect
 )
