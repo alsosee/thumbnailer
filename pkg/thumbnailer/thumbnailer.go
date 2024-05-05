@@ -1,6 +1,7 @@
 package thumbnailer
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"image/draw"
@@ -9,10 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/log"
 	"github.com/nfnt/resize"
 	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
@@ -107,14 +106,13 @@ func ScanDirectory(dir string) ([]string, error) {
 	return result, nil
 }
 
-func GenerateThumbnail(batch int, media []*Media, dir, format string) (string, error) {
-	log.Infof("Generating %s thumbnail for batch %d in %s", format, batch, dir)
+func GenerateThumbnail(media []*Media, dir, format string) ([]byte, error) {
 	// each thumbnail should fit into 140x140px square, maximum 10 files in a row
 	for _, file := range media {
 		// decode photo
 		img, err := readImage(dir, file.Path)
 		if err != nil {
-			return "", fmt.Errorf("reading image: %w", err)
+			return nil, fmt.Errorf("reading image: %w", err)
 		}
 		file.Width = img.Bounds().Dx()
 		file.Height = img.Bounds().Dy()
@@ -175,7 +173,6 @@ func GenerateThumbnail(batch int, media []*Media, dir, format string) (string, e
 
 	// draw files on thumbnail
 	var (
-		thumbPath = "thumbnails_" + strconv.Itoa(batch) + "." + format
 		x         int
 		y         int
 		col       int
@@ -194,7 +191,6 @@ func GenerateThumbnail(batch int, media []*Media, dir, format string) (string, e
 			rowHeight = container.Media.ThumbHeight
 		}
 
-		container.Media.ThumbPath = thumbPath
 		container.Media.ThumbXOffset = x
 		container.Media.ThumbYOffset = y
 		container.Media.ThumbTotalWidth = totalWidth
@@ -211,30 +207,25 @@ func GenerateThumbnail(batch int, media []*Media, dir, format string) (string, e
 		col++
 	}
 
-	out, err := os.Create(filepath.Join(dir, thumbPath))
-	if err != nil {
-		return "", fmt.Errorf("creating file %q: %w", thumbPath, err)
-	}
-	defer out.Close()
-
+	var b bytes.Buffer
 	switch format {
 	case "png":
 		// encode thumbnail into PNG
-		if err = png.Encode(out, img); err != nil {
-			return "", fmt.Errorf("encoding thumbnail: %w", err)
+		if err := png.Encode(&b, img); err != nil {
+			return nil, fmt.Errorf("encoding thumbnail: %w", err)
 		}
 	case "jpg":
 		jpegOptions := jpeg.Options{
 			Quality: 95,
 		}
-		if err := jpeg.Encode(out, img, &jpegOptions); err != nil {
-			return "", fmt.Errorf("encoding thumbnail: %w", err)
+		if err := jpeg.Encode(&b, img, &jpegOptions); err != nil {
+			return nil, fmt.Errorf("encoding thumbnail: %w", err)
 		}
 	default:
-		return "", fmt.Errorf("unsupported format: %s", format)
+		return nil, fmt.Errorf("unsupported format: %s", format)
 	}
 
-	return thumbPath, nil
+	return b.Bytes(), nil
 }
 
 func readImage(dir, path string) (image.Image, error) {

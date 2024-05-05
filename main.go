@@ -336,30 +336,33 @@ func generateThumbnails(
 			continue
 		}
 
-		thumbPath, err := thumbnailer.GenerateThumbnail(batch, files, dir, format)
+		thumbPath := fmt.Sprintf("thumbnails_%d.%s", batch, format)
+
+		log.Infof("Generating %s thumbnail for batch %d in %s", format, batch, dir)
+		b, err := thumbnailer.GenerateThumbnail(files, dir, format)
 		if err != nil {
 			return nil, fmt.Errorf("generating thumbnail for %s / %d: %w", dir, batch, err)
-		}
-
-		thumbContent, err := os.ReadFile(filepath.Join(dir, thumbPath))
-		if err != nil {
-			return nil, fmt.Errorf("reading thumbnail %q: %w", thumbPath, err)
-		}
-
-		// upload thumbnail to R2
-		if !cfg.SkipImageUpload {
-			cleanPath := strings.TrimPrefix(filepath.Join(dir, thumbPath), cfg.MediaDir+"/")
-			if err := r2.Upload(ctx, cleanPath, thumbContent); err != nil {
-				return nil, fmt.Errorf("uploading thumbnail %q: %w", thumbPath, err)
-			}
-		} else {
-			log.Infof("Skipping thumbnail upload")
 		}
 
 		// update thumb path with CRC32 checksum for each photo
 		for _, photo := range media {
 			log.Infof("Updating thumb path for %s", photo.Path)
-			photo.ThumbPath = thumbPath + "?crc=" + crc32sum(thumbContent)
+			photo.ThumbPath = thumbPath + "?crc=" + crc32sum(b)
+		}
+
+		err = os.WriteFile(filepath.Join(dir, thumbPath), b, 0o644)
+		if err != nil {
+			return nil, fmt.Errorf("writing thumbnail %q: %w", thumbPath, err)
+		}
+
+		// upload thumbnail to R2
+		if !cfg.SkipImageUpload {
+			cleanPath := strings.TrimPrefix(filepath.Join(dir, thumbPath), cfg.MediaDir+"/")
+			if err := r2.Upload(ctx, cleanPath, b); err != nil {
+				return nil, fmt.Errorf("uploading thumbnail %q: %w", thumbPath, err)
+			}
+		} else {
+			log.Infof("Skipping thumbnail upload")
 		}
 	}
 
