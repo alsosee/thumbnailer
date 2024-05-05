@@ -12,22 +12,14 @@ import (
 	"errors"
 	"fmt"
 	"hash/crc32"
-	"image"
-	"image/draw"
-	"image/jpeg"
-	"image/png"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/log"
 	flags "github.com/jessevdk/go-flags"
-	"github.com/nfnt/resize"
 	gitignore "github.com/sabhiram/go-gitignore"
-	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
 
 	"github.com/alsosee/thumbnailer/pkg/thumbnailer"
@@ -155,7 +147,7 @@ func processDirectory(ctx context.Context, r2 *R2, dir string) error {
 	}
 
 	// scan directory for all image files
-	files, err := scanDirectory(dir)
+	files, err := thumbnailer.ScanDirectory(dir)
 	if err != nil {
 		return fmt.Errorf("scanning directory: %w", err)
 	}
@@ -181,35 +173,6 @@ func processDirectory(ctx context.Context, r2 *R2, dir string) error {
 	return nil
 }
 
-func scanDirectory(dir string) ([]string, error) {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("reading directory %q: %w", dir, err)
-	}
-
-	var result []string
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
-
-		if strings.HasPrefix(file.Name(), "thumbnails_") {
-			continue
-		}
-
-		ext := filepath.Ext(file.Name())
-		if !contains([]string{".jpg", ".jpeg", ".png"}, ext) {
-			continue
-		}
-
-		result = append(result, fixUnicode(file.Name()))
-	}
-
-	sort.Strings(result)
-
-	return result, nil
-}
-
 func diff(media []*thumbnailer.Media, files []string) (toAdd, toDelete []string) {
 	// find new files
 	for _, file := range files {
@@ -226,16 +189,6 @@ func diff(media []*thumbnailer.Media, files []string) (toAdd, toDelete []string)
 	}
 
 	return toAdd, toDelete
-}
-
-func contains(arr []string, needle string) bool {
-	for _, item := range arr {
-		if item == needle {
-			return true
-		}
-	}
-
-	return false
 }
 
 func containsMedia(arr []*thumbnailer.Media, needle string) bool {
@@ -330,9 +283,8 @@ func groupByType(media []*thumbnailer.Media) map[string][]*thumbnailer.Media {
 }
 
 const (
-	maxThumbSize = 324 /* 162 * 2 */
-	maxPerRow    = 10
-	maxRows      = 5
+	maxPerRow = 10
+	maxRows   = 5
 )
 
 func generateThumbnails(
@@ -384,20 +336,19 @@ func generateThumbnails(
 			continue
 		}
 
-		thumbPath, err := generateThumbnail(batch, files, dir, format)
+		thumbPath, err := thumbnailer.GenerateThumbnail(batch, files, dir, format)
 		if err != nil {
 			return nil, fmt.Errorf("generating thumbnail for %s / %d: %w", dir, batch, err)
 		}
 
-		// upload thumbnail to R2
 		thumbContent, err := os.ReadFile(filepath.Join(dir, thumbPath))
 		if err != nil {
 			return nil, fmt.Errorf("reading thumbnail %q: %w", thumbPath, err)
 		}
 
-		cleanPath := strings.TrimPrefix(filepath.Join(dir, thumbPath), cfg.MediaDir+"/")
-
+		// upload thumbnail to R2
 		if !cfg.SkipImageUpload {
+			cleanPath := strings.TrimPrefix(filepath.Join(dir, thumbPath), cfg.MediaDir+"/")
 			if err := r2.Upload(ctx, cleanPath, thumbContent); err != nil {
 				return nil, fmt.Errorf("uploading thumbnail %q: %w", thumbPath, err)
 			}
@@ -415,151 +366,6 @@ func generateThumbnails(
 	return media, nil
 }
 
-func generateThumbnail(batch int, media []*thumbnailer.Media, dir, format string) (string, error) {
-	log.Infof("Generating %s thumbnail for batch %d in %s", format, batch, dir)
-	// each thumbnail should fit into 140x140px square, maximum 10 files in a row
-	for _, file := range media {
-		// decode photo
-		img, err := readImage(dir, file.Path)
-		if err != nil {
-			return "", fmt.Errorf("reading image: %w", err)
-		}
-		file.Width = img.Bounds().Dx()
-		file.Height = img.Bounds().Dy()
-
-		// resize photo to 140x140px
-		img = resize.Thumbnail(
-			maxThumbSize,
-			maxThumbSize,
-			img,
-			resize.Lanczos3,
-		)
-		file.Image = img
-		file.ThumbWidth = img.Bounds().Dx()
-		file.ThumbHeight = img.Bounds().Dy()
-	}
-
-	// sort media by height, aiming to have less empty space
-	// create a slice of pointers to the original files
-	containers := make([]thumbnailer.MediaContainer, len(media))
-	for i := range media {
-		containers[i].Media = media[i]
-	}
-
-	// sort the slice of pointers by thumb height in descending order
-	sort.Sort(thumbnailer.ByThumbHeightDesc(containers))
-
-	// calculate thumbnail image size
-	var (
-		rowWidth    int
-		totalWidth  int
-		totalHeight int
-		counter     int
-	)
-	for i, container := range containers {
-		if i == 0 {
-			totalHeight = container.Media.ThumbHeight
-			totalWidth = container.Media.ThumbWidth
-		}
-
-		if counter == maxPerRow {
-			totalHeight += container.Media.ThumbHeight
-			if rowWidth > totalWidth {
-				totalWidth = rowWidth
-			}
-			rowWidth = 0
-			counter = 0
-		}
-
-		rowWidth += container.Media.ThumbWidth
-		counter++
-	}
-
-	if rowWidth > totalWidth {
-		totalWidth = rowWidth
-	}
-
-	img := image.NewRGBA(image.Rect(0, 0, totalWidth, totalHeight))
-
-	// draw files on thumbnail
-	var (
-		thumbPath = "thumbnails_" + strconv.Itoa(batch) + "." + format
-		x         int
-		y         int
-		col       int
-		rowHeight int
-	)
-
-	for i, container := range containers {
-		if i == 0 {
-			rowHeight = container.Media.ThumbHeight
-		}
-
-		if col == maxPerRow {
-			x = 0
-			col = 0
-			y += rowHeight
-			rowHeight = container.Media.ThumbHeight
-		}
-
-		container.Media.ThumbPath = thumbPath
-		container.Media.ThumbXOffset = x
-		container.Media.ThumbYOffset = y
-		container.Media.ThumbTotalWidth = totalWidth
-		container.Media.ThumbTotalHeight = totalHeight
-
-		draw.Draw(
-			img,
-			image.Rect(x, y, x+container.Media.ThumbWidth, y+container.Media.ThumbHeight),
-			container.Media.Image,
-			image.Point{0, 0},
-			draw.Src,
-		)
-		x += container.Media.ThumbWidth
-		col++
-	}
-
-	out, err := os.Create(filepath.Join(dir, thumbPath))
-	if err != nil {
-		return "", fmt.Errorf("creating file %q: %w", thumbPath, err)
-	}
-	defer out.Close()
-
-	switch format {
-	case "png":
-		// encode thumbnail into PNG
-		if err = png.Encode(out, img); err != nil {
-			return "", fmt.Errorf("encoding thumbnail: %w", err)
-		}
-	case "jpg":
-		jpegOptions := jpeg.Options{
-			Quality: 95,
-		}
-		if err := jpeg.Encode(out, img, &jpegOptions); err != nil {
-			return "", fmt.Errorf("encoding thumbnail: %w", err)
-		}
-	default:
-		return "", fmt.Errorf("unsupported format: %s", format)
-	}
-
-	return thumbPath, nil
-}
-
-func readImage(dir, path string) (image.Image, error) {
-	file, err := os.Open(filepath.Join(dir, path))
-	if err != nil {
-		return nil, fmt.Errorf("opening file: %w", err)
-	}
-	defer file.Close()
-
-	img, _, err := image.Decode(file)
-	if err != nil {
-		return nil, fmt.Errorf("decoding image: %w", err)
-	}
-
-	return img, nil
-}
-
 func crc32sum(content []byte) string {
 	hash := crc32.NewIEEE()
 	if _, err := io.Copy(hash, bytes.NewReader(content)); err != nil {
@@ -570,6 +376,12 @@ func crc32sum(content []byte) string {
 	return fmt.Sprintf("%x", hash.Sum32())
 }
 
-func fixUnicode(in string) string {
-	return norm.NFC.String(in)
+func contains(arr []string, needle string) bool {
+	for _, item := range arr {
+		if item == needle {
+			return true
+		}
+	}
+
+	return false
 }
