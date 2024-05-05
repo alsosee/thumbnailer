@@ -29,40 +29,9 @@ import (
 	gitignore "github.com/sabhiram/go-gitignore"
 	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
+
+	"github.com/alsosee/thumbnailer/pkg/thumbnailer"
 )
-
-// Media struct for items in .thumbs.yml file.
-type Media struct {
-	Path                string
-	Width               int    `yaml:"width,omitempty"`
-	Height              int    `yaml:"height,omitempty"`
-	ThumbPath           string `yaml:"thumb,omitempty"`
-	ThumbXOffset        int    `yaml:"thumb_x,omitempty"`
-	ThumbYOffset        int    `yaml:"thumb_y,omitempty"`
-	ThumbWidth          int    `yaml:"thumb_width,omitempty"`
-	ThumbHeight         int    `yaml:"thumb_height,omitempty"`
-	ThumbTotalWidth     int    `yaml:"thumb_total_width,omitempty"`
-	ThumbTotalHeight    int    `yaml:"thumb_total_height,omitempty"`
-	Blurhash            string `yaml:"blurhash,omitempty"`
-	BlurhashImageBase64 string `yaml:"blurhash_image_base64,omitempty"`
-
-	// Temporary image.Image field used to generate thumbnails
-	image image.Image `yaml:"-"`
-}
-
-// MediaContainer is a wrapper for Photo struct, used for sorting,
-// so that references are not swapped and still can be modified.
-type MediaContainer struct {
-	Media *Media
-}
-
-type byThumbHeightDesc []MediaContainer
-
-func (a byThumbHeightDesc) Len() int      { return len(a) }
-func (a byThumbHeightDesc) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
-func (a byThumbHeightDesc) Less(i, j int) bool {
-	return a[i].Media.ThumbHeight > a[j].Media.ThumbHeight
-}
 
 type appConfig struct {
 	// Directory with media files
@@ -174,16 +143,14 @@ func scanDirectories(dir string) ([]string, error) {
 	return result, err
 }
 
-var errThumbYamlNotFound = fmt.Errorf(".thumbs.yml not found")
-
 func processDirectory(ctx context.Context, r2 *R2, dir string) error {
 	log.Infof("Processing %s", dir)
 
 	thumbsFile := filepath.Join(dir, ".thumbs.yml")
 
 	// look for .thumb.yml file
-	media, err := loadThumbsFile(thumbsFile)
-	if err != nil && !errors.Is(err, errThumbYamlNotFound) {
+	media, err := thumbnailer.LoadThumbsFile(thumbsFile)
+	if err != nil && !errors.Is(err, thumbnailer.ErrThumbYamlNotFound) {
 		return fmt.Errorf("loading thumbs file: %w", err)
 	}
 
@@ -212,26 +179,6 @@ func processDirectory(ctx context.Context, r2 *R2, dir string) error {
 	}
 
 	return nil
-}
-
-func loadThumbsFile(path string) ([]*Media, error) {
-	// check if file exists
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, errThumbYamlNotFound
-	}
-
-	// read .thumbs.yml file
-	fileContent, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading file: %w", err)
-	}
-
-	var media []*Media
-	if err = yaml.Unmarshal(fileContent, &media); err != nil {
-		return nil, fmt.Errorf("unmarshaling file: %w", err)
-	}
-
-	return media, nil
 }
 
 func scanDirectory(dir string) ([]string, error) {
@@ -263,7 +210,7 @@ func scanDirectory(dir string) ([]string, error) {
 	return result, nil
 }
 
-func diff(media []*Media, files []string) (toAdd, toDelete []string) {
+func diff(media []*thumbnailer.Media, files []string) (toAdd, toDelete []string) {
 	// find new files
 	for _, file := range files {
 		if !containsMedia(media, file) {
@@ -291,7 +238,7 @@ func contains(arr []string, needle string) bool {
 	return false
 }
 
-func containsMedia(arr []*Media, needle string) bool {
+func containsMedia(arr []*thumbnailer.Media, needle string) bool {
 	for _, item := range arr {
 		if item.Path == needle {
 			return true
@@ -301,7 +248,7 @@ func containsMedia(arr []*Media, needle string) bool {
 	return false
 }
 
-func saveThumbsFile(path string, media []*Media) error {
+func saveThumbsFile(path string, media []*thumbnailer.Media) error {
 	if len(media) == 0 {
 		return nil
 	}
@@ -321,14 +268,14 @@ func saveThumbsFile(path string, media []*Media) error {
 func uploadNewMedia(
 	ctx context.Context,
 	r2 *R2,
-	media []*Media,
+	media []*thumbnailer.Media,
 	files []string,
 	dir string,
-) ([]*Media, error) {
+) ([]*thumbnailer.Media, error) {
 	toAdd, toDelete := diff(media, files)
 
 	for _, file := range toAdd {
-		media = append(media, &Media{
+		media = append(media, &thumbnailer.Media{
 			Path: file,
 		})
 
@@ -363,8 +310,8 @@ func uploadNewMedia(
 	return media, nil
 }
 
-func groupByType(media []*Media) map[string][]*Media {
-	result := make(map[string][]*Media)
+func groupByType(media []*thumbnailer.Media) map[string][]*thumbnailer.Media {
+	result := make(map[string][]*thumbnailer.Media)
 
 	for _, file := range media {
 		ext := strings.Trim(filepath.Ext(file.Path), ".")
@@ -373,7 +320,7 @@ func groupByType(media []*Media) map[string][]*Media {
 		}
 
 		if _, ok := result[ext]; !ok {
-			result[ext] = make([]*Media, 0)
+			result[ext] = make([]*thumbnailer.Media, 0)
 		}
 
 		result[ext] = append(result[ext], file)
@@ -391,13 +338,13 @@ const (
 func generateThumbnails(
 	ctx context.Context,
 	r2 *R2,
-	media []*Media,
+	media []*thumbnailer.Media,
 	dir string,
 	format string,
 	force bool,
-) ([]*Media, error) {
+) ([]*thumbnailer.Media, error) {
 	// split files into batches of 100 files each
-	batches := make([][]*Media, 0)
+	batches := make([][]*thumbnailer.Media, 0)
 	for i := 0; i < len(media); i += maxPerRow * maxRows {
 		end := i + maxPerRow*maxRows
 		if end > len(media) {
@@ -450,12 +397,17 @@ func generateThumbnails(
 
 		cleanPath := strings.TrimPrefix(filepath.Join(dir, thumbPath), cfg.MediaDir+"/")
 
-		if err := r2.Upload(ctx, cleanPath, thumbContent); err != nil {
-			return nil, fmt.Errorf("uploading thumbnail %q: %w", thumbPath, err)
+		if !cfg.SkipImageUpload {
+			if err := r2.Upload(ctx, cleanPath, thumbContent); err != nil {
+				return nil, fmt.Errorf("uploading thumbnail %q: %w", thumbPath, err)
+			}
+		} else {
+			log.Infof("Skipping thumbnail upload")
 		}
 
 		// update thumb path with CRC32 checksum for each photo
 		for _, photo := range media {
+			log.Infof("Updating thumb path for %s", photo.Path)
 			photo.ThumbPath = thumbPath + "?crc=" + crc32sum(thumbContent)
 		}
 	}
@@ -463,7 +415,7 @@ func generateThumbnails(
 	return media, nil
 }
 
-func generateThumbnail(batch int, media []*Media, dir, format string) (string, error) {
+func generateThumbnail(batch int, media []*thumbnailer.Media, dir, format string) (string, error) {
 	log.Infof("Generating %s thumbnail for batch %d in %s", format, batch, dir)
 	// each thumbnail should fit into 140x140px square, maximum 10 files in a row
 	for _, file := range media {
@@ -482,20 +434,20 @@ func generateThumbnail(batch int, media []*Media, dir, format string) (string, e
 			img,
 			resize.Lanczos3,
 		)
-		file.image = img
+		file.Image = img
 		file.ThumbWidth = img.Bounds().Dx()
 		file.ThumbHeight = img.Bounds().Dy()
 	}
 
 	// sort media by height, aiming to have less empty space
 	// create a slice of pointers to the original files
-	containers := make([]MediaContainer, len(media))
+	containers := make([]thumbnailer.MediaContainer, len(media))
 	for i := range media {
 		containers[i].Media = media[i]
 	}
 
 	// sort the slice of pointers by thumb height in descending order
-	sort.Sort(byThumbHeightDesc(containers))
+	sort.Sort(thumbnailer.ByThumbHeightDesc(containers))
 
 	// calculate thumbnail image size
 	var (
@@ -559,7 +511,7 @@ func generateThumbnail(batch int, media []*Media, dir, format string) (string, e
 		draw.Draw(
 			img,
 			image.Rect(x, y, x+container.Media.ThumbWidth, y+container.Media.ThumbHeight),
-			container.Media.image,
+			container.Media.Image,
 			image.Point{0, 0},
 			draw.Src,
 		)
