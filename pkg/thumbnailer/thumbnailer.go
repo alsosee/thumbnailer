@@ -265,9 +265,9 @@ func GenerateThumbnails(
 		}
 
 		// update thumb path with CRC32 checksum for each photo
-		for _, photo := range media {
-			log.Infof("Updating thumb path for %s", photo.Path)
-			photo.ThumbPath = thumbPath + "?crc=" + crc32sum(b)
+		for _, file := range files {
+			log.Infof("Updating thumb path for %s", file.Path)
+			file.ThumbPath = thumbPath + "?crc=" + crc32sum(b)
 		}
 
 		err = os.WriteFile(filepath.Join(dir, thumbPath), b, 0o644)
