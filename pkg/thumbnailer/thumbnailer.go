@@ -255,15 +255,13 @@ func GenerateThumbnails(
 		log.Info("Forcing thumbnail generation")
 	}
 
-	var updatedThumbnailForPaths []string
+	var updated []string
 
 	// generate thumbnails for each batch
 	for batch, files := range batches {
 		if files == nil {
 			continue
 		}
-
-		updatedThumbnailForPaths = append(updatedThumbnailForPaths, collectPaths(files, dir)...)
 
 		thumbPath := fmt.Sprintf("thumbnails_%d.%s", batch, format)
 
@@ -277,6 +275,7 @@ func GenerateThumbnails(
 		for _, file := range files {
 			log.Infof("Updating thumb path for %s", file.Path)
 			file.ThumbPath = thumbPath + "?crc=" + crc32sum(b)
+			updated = append(updated, filepath.Join(dir, file.Path))
 		}
 
 		err = os.WriteFile(filepath.Join(dir, thumbPath), b, 0o644)
@@ -290,7 +289,7 @@ func GenerateThumbnails(
 		}
 	}
 
-	return updatedThumbnailForPaths, nil
+	return updated, nil
 }
 
 func GenerateThumbnail(media []*Media, dir, format string) ([]byte, error) {
@@ -499,13 +498,4 @@ func containsMedia(arr []*Media, needle string) bool {
 	}
 
 	return false
-}
-
-func collectPaths(arr []*Media, dir string) []string {
-	var result []string
-	for _, item := range arr {
-		result = append(result, filepath.Join(dir, item.Path))
-	}
-
-	return result
 }

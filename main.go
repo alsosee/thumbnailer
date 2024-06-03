@@ -191,6 +191,10 @@ func formatOutput(name, value string) string {
 }
 
 func convertToFilePaths(arr []string, prefix string) []string {
+	if len(arr) == 0 {
+		return nil
+	}
+
 	result := make([]string, 0, len(arr))
 	for i, s := range arr {
 		// replace file extension with ".yml" & remove prefix "media/"
