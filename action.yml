@@ -44,6 +44,10 @@ inputs:
     required: false
     default: "false"
 
+outputs:
+  updated:
+    description: "List of potentially affected \"info\" files. Used to trigger search index action."
+
 runs:
   using: docker
   image: docker://ghcr.io/alsosee/thumbnailer:latest

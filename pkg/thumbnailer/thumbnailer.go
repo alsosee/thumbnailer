@@ -103,7 +103,7 @@ func SaveThumbsFile(path string, media []*Media) error {
 	return nil
 }
 
-func ProcessDirectory(dir string, up Uploader, force bool) error {
+func ProcessDirectory(dir string, up Uploader, force bool) ([]string, error) {
 	log.Infof("Processing %s", dir)
 
 	thumbsFile := filepath.Join(dir, ".thumbs.yml")
@@ -111,34 +111,38 @@ func ProcessDirectory(dir string, up Uploader, force bool) error {
 	// look for .thumb.yml file
 	media, err := LoadThumbsFile(thumbsFile)
 	if err != nil && !errors.Is(err, ErrThumbYamlNotFound) {
-		return fmt.Errorf("loading thumbs file: %w", err)
+		return nil, fmt.Errorf("loading thumbs file: %w", err)
 	}
 
 	// scan directory for all image files
 	files, err := ScanDirectory(dir)
 	if err != nil {
-		return fmt.Errorf("scanning directory: %w", err)
+		return nil, fmt.Errorf("scanning directory: %w", err)
 	}
 
 	media, err = UploadNewMedia(up, media, files, dir)
 	if err != nil {
-		return fmt.Errorf("uploading new media: %w", err)
+		return nil, fmt.Errorf("uploading new media: %w", err)
 	}
 
 	mediaGrouped := groupByType(media)
 
+	var updatedGrouped []string
+
 	for format, media := range mediaGrouped {
-		_, err = GenerateThumbnails(up, media, dir, format, force)
+		updated, err := GenerateThumbnails(up, media, dir, format, force)
 		if err != nil {
-			return fmt.Errorf("generating thumbnails: %w", err)
+			return nil, fmt.Errorf("generating thumbnails: %w", err)
 		}
+
+		updatedGrouped = append(updatedGrouped, updated...)
 	}
 
 	if err = SaveThumbsFile(thumbsFile, media); err != nil {
-		return fmt.Errorf("saving media: %w", err)
+		return nil, fmt.Errorf("saving media: %w", err)
 	}
 
-	return nil
+	return updatedGrouped, nil
 }
 
 func UploadNewMedia(
@@ -214,7 +218,7 @@ func GenerateThumbnails(
 	dir string,
 	format string,
 	force bool,
-) ([]*Media, error) {
+) ([]string, error) {
 	// split files into batches of 100 files each
 	batches := make([][]*Media, 0)
 	for i := 0; i < len(media); i += maxPerRow * maxRows {
@@ -243,6 +247,7 @@ func GenerateThumbnails(
 				}
 			}
 			if allHaveThumbs && allHaveSameThumb {
+				// batch did not change, ignore it
 				batches[batch] = nil
 			}
 		}
@@ -250,11 +255,15 @@ func GenerateThumbnails(
 		log.Info("Forcing thumbnail generation")
 	}
 
-	// generate thumbnails for each year
+	var updatedThumbnailForPaths []string
+
+	// generate thumbnails for each batch
 	for batch, files := range batches {
 		if files == nil {
 			continue
 		}
+
+		updatedThumbnailForPaths = append(updatedThumbnailForPaths, collectPaths(files, dir)...)
 
 		thumbPath := fmt.Sprintf("thumbnails_%d.%s", batch, format)
 
@@ -281,7 +290,7 @@ func GenerateThumbnails(
 		}
 	}
 
-	return media, nil
+	return updatedThumbnailForPaths, nil
 }
 
 func GenerateThumbnail(media []*Media, dir, format string) ([]byte, error) {
@@ -490,4 +499,13 @@ func containsMedia(arr []*Media, needle string) bool {
 	}
 
 	return false
+}
+
+func collectPaths(arr []*Media, dir string) []string {
+	var result []string
+	for _, item := range arr {
+		result = append(result, filepath.Join(dir, item.Path))
+	}
+
+	return result
 }

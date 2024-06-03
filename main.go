@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -87,11 +88,20 @@ func run() error {
 		return fmt.Errorf("scanning directories: %w", err)
 	}
 
+	var allUpdated []string
+
 	for _, dir := range dirs {
-		err = thumbnailer.ProcessDirectory(dir, up, cfg.ForceThumbnails)
+		updated, err := thumbnailer.ProcessDirectory(dir, up, cfg.ForceThumbnails)
 		if err != nil {
 			return fmt.Errorf("processing directory %q: %w", dir, err)
 		}
+
+		allUpdated = append(allUpdated, convertToFilePaths(updated, cfg.MediaDir+"/")...)
+	}
+
+	err = writeOutput("updated", strings.Join(allUpdated, ","))
+	if err != nil {
+		return fmt.Errorf("writing output: %w", err)
 	}
 
 	return nil
@@ -138,4 +148,56 @@ func scanDirectories(dir string) ([]string, error) {
 		return nil
 	})
 	return result, err
+}
+
+func writeOutput(name, value string) error {
+	githubOutput := formatOutput(name, value)
+	if githubOutput == "" {
+		return nil
+	}
+
+	path := os.Getenv("GITHUB_OUTPUT")
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return fmt.Errorf(
+			"failed to open result file %q: %v. "+
+				"If you are using self-hosted runners "+
+				"make sure they are updated to version 2.297.0 or greater",
+			path,
+			err,
+		)
+	}
+	defer f.Close()
+
+	if _, err = f.WriteString(githubOutput); err != nil {
+		return fmt.Errorf("failed to write result to file %q: %w", path, err)
+	}
+
+	return nil
+}
+
+func formatOutput(name, value string) string {
+	if value == "" {
+		return ""
+	}
+
+	// if value contains new line, use multiline format
+	if bytes.ContainsRune([]byte(value), '\n') {
+		return fmt.Sprintf("%s<<OUTPUT\n%s\nOUTPUT", name, value)
+	}
+
+	return fmt.Sprintf("%s=%s", name, value)
+}
+
+func convertToFilePaths(arr []string, prefix string) []string {
+	result := make([]string, 0, len(arr))
+	for i, s := range arr {
+		// replace file extension with ".yml" & remove prefix "media/"
+		result[i] = strings.TrimSuffix(
+			strings.TrimPrefix(s, prefix),
+			filepath.Ext(s),
+		) + ".yml"
+	}
+	return result
 }
