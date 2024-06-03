@@ -96,7 +96,10 @@ func run() error {
 			return fmt.Errorf("processing directory %q: %w", dir, err)
 		}
 
-		allUpdated = append(allUpdated, convertToFilePaths(updated, cfg.MediaDir+"/")...)
+		allUpdated = append(
+			allUpdated,
+			convertToFilePaths(updated, filepath.Base(cfg.MediaDir)+"/")...,
+		)
 	}
 
 	err = writeOutput("updated", strings.Join(allUpdated, ","))
