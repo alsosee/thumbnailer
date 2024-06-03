@@ -195,7 +195,7 @@ func convertToFilePaths(arr []string, prefix string) []string {
 		return nil
 	}
 
-	result := make([]string, 0, len(arr))
+	result := make([]string, len(arr))
 	for i, s := range arr {
 		// replace file extension with ".yml" & remove prefix "media/"
 		result[i] = strings.TrimSuffix(
