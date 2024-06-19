@@ -9,6 +9,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -102,7 +103,13 @@ func run() error {
 		)
 	}
 
-	err = writeOutput("updated", strings.Join(allUpdated, ","))
+	// json-encode allUpdated
+	b, err := json.Marshal(allUpdated)
+	if err != nil {
+		return fmt.Errorf("json encoding allUpdated: %w", err)
+	}
+
+	err = writeOutput("updated", string(b))
 	if err != nil {
 		return fmt.Errorf("writing output: %w", err)
 	}
