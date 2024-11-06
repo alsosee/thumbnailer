@@ -43,6 +43,10 @@ inputs:
     description: Force blurhash creation for images
     required: false
     default: "false"
+  escape_quotes:
+    description: Escape quotes in updated output
+    required: false
+    default: "false"
 
 outputs:
   updated:

@@ -41,6 +41,8 @@ type appConfig struct {
 
 	SkipImageUpload bool `env:"INPUT_SKIP_IMAGE_UPLOAD" long:"skip-image-upload" description:"skip image upload to R2"`
 
+	EscapeQuotes bool `env:"INPUT_ESCAPE_QUOTES" long:"escape-qutes" description:"escape quotes in the output"`
+
 	// Blurhash
 	ForceBlurhash       bool `env:"INPUT_FORCE_BLURHASH" long:"force-blurhash" description:"force blurhash generation"`
 	ForceBlurhashImages bool `env:"INPUT_FORCE_BLURHASH_IMAGES" long:"force-blurhash-images" description:"force blurhash images generation"`
@@ -107,6 +109,11 @@ func run() error {
 	b, err := json.Marshal(allUpdated)
 	if err != nil {
 		return fmt.Errorf("json encoding allUpdated: %w", err)
+	}
+
+	// escape quotes if needed
+	if cfg.EscapeQuotes {
+		b = bytes.ReplaceAll(b, []byte(`"`), []byte(`\"`))
 	}
 
 	err = writeOutput("updated", string(b))
