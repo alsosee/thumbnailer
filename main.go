@@ -111,12 +111,14 @@ func run() error {
 		return fmt.Errorf("json encoding allUpdated: %w", err)
 	}
 
+	updated := string(b)
+
 	// escape quotes if needed
 	if cfg.EscapeQuotes {
-		b = bytes.ReplaceAll(b, []byte(`"`), []byte(`\"`))
+		updated = escape(updated)
 	}
 
-	err = writeOutput("updated", string(b))
+	err = writeOutput("updated", updated)
 	if err != nil {
 		return fmt.Errorf("writing output: %w", err)
 	}
@@ -221,4 +223,9 @@ func convertToFilePaths(arr []string, prefix string) []string {
 		) + ".yml"
 	}
 	return result
+}
+
+func escape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	return strings.ReplaceAll(s, `"`, `\"`)
 }
