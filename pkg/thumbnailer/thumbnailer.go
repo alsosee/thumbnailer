@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+	"github.com/disintegration/imageorient"
 	"github.com/nfnt/resize"
 	"golang.org/x/text/unicode/norm"
 	"gopkg.in/yaml.v3"
@@ -421,7 +422,7 @@ func readImage(dir, path string) (image.Image, error) {
 	}
 	defer file.Close()
 
-	img, _, err := image.Decode(file)
+	img, _, err := imageorient.Decode(file)
 	if err != nil {
 		return nil, fmt.Errorf("decoding image: %w", err)
 	}
